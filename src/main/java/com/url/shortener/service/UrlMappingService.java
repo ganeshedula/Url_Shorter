@@ -3,6 +3,7 @@ package com.url.shortener.service;
 import com.url.shortener.config.AppProperties;
 import com.url.shortener.dtos.ClickEventDto;
 import com.url.shortener.dtos.DailyClickDto;
+import com.url.shortener.dtos.LocationAnalyticsDto;
 import com.url.shortener.dtos.PagedResponse;
 import com.url.shortener.dtos.ShortUrlResponse;
 import com.url.shortener.dtos.UpdateUrlRequest;
@@ -16,6 +17,7 @@ import com.url.shortener.repo.ClickEventRepository;
 import com.url.shortener.repo.UrlMappingRepository;
 import com.url.shortener.util.ClientInfo;
 import com.url.shortener.util.ShortCodeGenerator;
+import org.springframework.context.ApplicationEventPublisher;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -42,17 +44,20 @@ public class UrlMappingService {
     private final ClickEventRepository clickEventRepository;
     private final ShortCodeGenerator shortCodeGenerator;
     private final AppProperties appProperties;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public UrlMappingService(
         UrlMappingRepository urlMappingRepository,
         ClickEventRepository clickEventRepository,
         ShortCodeGenerator shortCodeGenerator,
-        AppProperties appProperties
+        AppProperties appProperties,
+        ApplicationEventPublisher applicationEventPublisher
     ) {
         this.urlMappingRepository = urlMappingRepository;
         this.clickEventRepository = clickEventRepository;
         this.shortCodeGenerator = shortCodeGenerator;
         this.appProperties = appProperties;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     @Transactional
@@ -113,6 +118,34 @@ public class UrlMappingService {
             .map(this::toClickEventDto)
             .toList();
 
+        List<LocationAnalyticsDto> topLocations = events.stream()
+            .collect(Collectors.groupingBy(
+                event -> new LocationKey(
+                    normalizeLocationValue(event.getCountry()),
+                    normalizeLocationValue(event.getCountryCode()),
+                    normalizeLocationValue(event.getRegion()),
+                    normalizeLocationValue(event.getCity()),
+                    event.getLatitude(),
+                    event.getLongitude(),
+                    normalizeLocationValue(event.getTimezone())
+                ),
+                Collectors.counting()
+            ))
+            .entrySet().stream()
+            .sorted(Map.Entry.<LocationKey, Long>comparingByValue(Comparator.reverseOrder()))
+            .limit(10)
+            .map(entry -> LocationAnalyticsDto.builder()
+                .country(entry.getKey().country())
+                .countryCode(entry.getKey().countryCode())
+                .region(entry.getKey().region())
+                .city(entry.getKey().city())
+                .latitude(entry.getKey().latitude())
+                .longitude(entry.getKey().longitude())
+                .timezone(entry.getKey().timezone())
+                .clicks(entry.getValue())
+                .build())
+            .toList();
+
         return UrlAnalyticsResponse.builder()
             .id(urlMapping.getId())
             .originalUrl(urlMapping.getOriginalUrl())
@@ -123,6 +156,7 @@ public class UrlMappingService {
             .lastAccessedAt(urlMapping.getLastAccessedAt())
             .clickCount(urlMapping.getClickCount())
             .dailyClicks(dailyClicks)
+            .topLocations(topLocations)
             .recentClicks(recentClicks)
             .build();
     }
@@ -168,12 +202,19 @@ public class UrlMappingService {
         event.setOperatingSystem(clientInfo.getOperatingSystem());
         event.setIpAddress(clientInfo.getIpAddress());
         event.setCountry(clientInfo.getCountry());
+        event.setCountryCode(clientInfo.getCountryCode());
+        event.setRegion(clientInfo.getRegion());
+        event.setCity(clientInfo.getCity());
+        event.setTimezone(clientInfo.getTimezone());
+        event.setLatitude(clientInfo.getLatitude());
+        event.setLongitude(clientInfo.getLongitude());
         event.setUserAgent(clientInfo.getUserAgent());
 
         urlMapping.setClickCount(urlMapping.getClickCount() + 1);
         urlMapping.setLastAccessedAt(event.getAccessedAt());
         clickEventRepository.save(event);
         urlMappingRepository.save(urlMapping);
+        applicationEventPublisher.publishEvent(new ClickEventRecorded(event.getId(), clientInfo.getIpAddress()));
         return urlMapping.getOriginalUrl();
     }
 
@@ -205,6 +246,12 @@ public class UrlMappingService {
             .operatingSystem(event.getOperatingSystem())
             .ipAddress(event.getIpAddress())
             .country(event.getCountry())
+            .countryCode(event.getCountryCode())
+            .region(event.getRegion())
+            .city(event.getCity())
+            .timezone(event.getTimezone())
+            .latitude(event.getLatitude())
+            .longitude(event.getLongitude())
             .build();
     }
 
@@ -238,5 +285,20 @@ public class UrlMappingService {
             case "updatedAt" -> "updatedAt";
             default -> "createdAt";
         };
+    }
+
+    private String normalizeLocationValue(String value) {
+        return (value == null || value.isBlank()) ? "Unknown" : value;
+    }
+
+    private record LocationKey(
+        String country,
+        String countryCode,
+        String region,
+        String city,
+        Double latitude,
+        Double longitude,
+        String timezone
+    ) {
     }
 }

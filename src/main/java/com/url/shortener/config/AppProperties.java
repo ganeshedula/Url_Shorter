@@ -21,6 +21,8 @@ public class AppProperties {
 
     private Cors cors = new Cors();
     private Jwt jwt = new Jwt();
+    private ClientIp clientIp = new ClientIp();
+    private GeoIp geoIp = new GeoIp();
 
     @Getter
     @Setter
@@ -35,5 +37,22 @@ public class AppProperties {
         private String secret;
         private Duration accessTokenExpiration = Duration.ofMinutes(15);
         private Duration refreshTokenExpiration = Duration.ofDays(7);
+    }
+
+    @Getter
+    @Setter
+    public static class ClientIp {
+        private boolean trustForwardHeaders = false;
+        private List<String> trustedProxies = List.of("127.0.0.1", "::1");
+    }
+
+    @Getter
+    @Setter
+    public static class GeoIp {
+        private boolean enabled = true;
+        private String endpointTemplate = "https://ipapi.co/%s/json/";
+        private Duration connectTimeout = Duration.ofMillis(500);
+        private Duration readTimeout = Duration.ofMillis(1200);
+        private Duration cacheTtl = Duration.ofHours(6);
     }
 }

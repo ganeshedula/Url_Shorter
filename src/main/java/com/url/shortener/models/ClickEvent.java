@@ -46,6 +46,24 @@ public class ClickEvent {
     @Column(name = "country", length = 100)
     private String country;
 
+    @Column(name = "country_code", length = 10)
+    private String countryCode;
+
+    @Column(name = "region", length = 120)
+    private String region;
+
+    @Column(name = "city", length = 120)
+    private String city;
+
+    @Column(name = "timezone", length = 120)
+    private String timezone;
+
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
     @Column(name = "user_agent", length = 512)
     private String userAgent;
 

@@ -58,6 +58,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
             String email = jwtService.extractEmail(token);
             UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByUsername(email);
+            if (jwtService.extractTokenVersion(token) != userDetails.getTokenVersion()) {
+                throw new InvalidTokenException("Token has been globally invalidated");
+            }
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 userDetails,
                 null,

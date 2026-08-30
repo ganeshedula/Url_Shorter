@@ -19,5 +19,6 @@ public class UrlAnalyticsResponse {
     private final OffsetDateTime lastAccessedAt;
     private final long clickCount;
     private final List<DailyClickDto> dailyClicks;
+    private final List<LocationAnalyticsDto> topLocations;
     private final List<ClickEventDto> recentClicks;
 }

@@ -40,6 +40,9 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 30)
     private Role role = Role.ROLE_USER;
 
+    @Column(name = "token_version", nullable = false)
+    private long tokenVersion = 0L;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UrlMapping> urlMappings = new ArrayList<>();
 

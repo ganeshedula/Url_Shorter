@@ -37,14 +37,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({
         BadRequestException.class,
-        InvalidTokenException.class,
         DuplicateResourceException.class
     })
     public ResponseEntity<ApiResponse<Object>> handleBadRequest(RuntimeException exception) {
         return ResponseEntity.badRequest().body(ApiResponse.failure(exception.getMessage(), List.of()));
     }
 
-    @ExceptionHandler({UnauthorizedException.class, BadCredentialsException.class})
+    @ExceptionHandler({UnauthorizedException.class, BadCredentialsException.class, InvalidTokenException.class})
     public ResponseEntity<ApiResponse<Object>> handleUnauthorized(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
             .body(ApiResponse.failure(exception.getMessage(), List.of()));

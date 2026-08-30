@@ -26,6 +26,7 @@ public class JwtService {
     public static final String CLAIM_ROLE = "role";
     public static final String CLAIM_TOKEN_TYPE = "tokenType";
     public static final String CLAIM_SESSION_ID = "sessionId";
+    public static final String CLAIM_TOKEN_VERSION = "tokenVersion";
     public static final String TOKEN_TYPE_ACCESS = "ACCESS";
     public static final String TOKEN_TYPE_REFRESH = "REFRESH";
 
@@ -79,6 +80,11 @@ public class JwtService {
         return extractClaims(token).get(CLAIM_SESSION_ID, String.class);
     }
 
+    public long extractTokenVersion(String token) {
+        Long tokenVersion = extractClaims(token).get(CLAIM_TOKEN_VERSION, Long.class);
+        return tokenVersion == null ? 0L : tokenVersion;
+    }
+
     public Instant extractExpiration(String token) {
         return extractClaims(token).getExpiration().toInstant();
     }
@@ -103,6 +109,7 @@ public class JwtService {
         claims.put(CLAIM_EMAIL, user.getEmail());
         claims.put(CLAIM_ROLE, user.getRole().name());
         claims.put(CLAIM_TOKEN_TYPE, tokenType);
+        claims.put(CLAIM_TOKEN_VERSION, user.getTokenVersion());
         if (sessionId != null) {
             claims.put(CLAIM_SESSION_ID, sessionId);
         }

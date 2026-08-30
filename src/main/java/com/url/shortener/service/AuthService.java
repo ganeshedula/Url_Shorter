@@ -90,6 +90,10 @@ public class AuthService {
         }
 
         User user = userService.findById(session.getUserId());
+        if (jwtService.extractTokenVersion(refreshToken) != user.getTokenVersion()) {
+            redisSessionService.invalidateSession(sessionId, user.getId());
+            throw new InvalidTokenException("Refresh token has been invalidated");
+        }
         redisSessionService.invalidateSession(sessionId, user.getId());
         return buildAuthResponse(user, clientInfo);
     }
@@ -111,7 +115,10 @@ public class AuthService {
     }
 
     public void logoutAll(String accessToken) {
-        UUID userId = jwtService.extractUserId(accessToken);
+        User user = userService.findById(jwtService.extractUserId(accessToken));
+        user.setTokenVersion(user.getTokenVersion() + 1);
+        userRepository.save(user);
+        UUID userId = user.getId();
         redisSessionService.invalidateAllSessions(userId);
         Duration ttl = Duration.between(OffsetDateTime.now(ZoneOffset.UTC).toInstant(), jwtService.extractExpiration(accessToken));
         redisSessionService.blacklistAccessToken(jwtService.extractId(accessToken), ttl);

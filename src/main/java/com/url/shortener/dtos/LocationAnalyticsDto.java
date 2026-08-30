@@ -3,20 +3,15 @@ package com.url.shortener.dtos;
 import lombok.Builder;
 import lombok.Getter;
 
-import java.time.OffsetDateTime;
-
 @Getter
 @Builder
-public class ClickEventDto {
-    private final OffsetDateTime accessedAt;
-    private final String browser;
-    private final String operatingSystem;
-    private final String ipAddress;
+public class LocationAnalyticsDto {
     private final String country;
     private final String countryCode;
     private final String region;
     private final String city;
-    private final String timezone;
     private final Double latitude;
     private final Double longitude;
+    private final String timezone;
+    private final long clicks;
 }
