@@ -22,15 +22,21 @@ public class EmailService {
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
     private final JavaMailSender mailSender;
     private final String sender;
+    private final String senderName;
 
-    public EmailService(JavaMailSender mailSender, @Value("${spring.mail.username:}") String sender) {
+    public EmailService(
+        JavaMailSender mailSender,
+        @Value("${app.mail.from:${spring.mail.username:}}") String sender,
+        @Value("${app.mail.sender-name:Nexly}") String senderName
+    ) {
         this.mailSender = mailSender;
         this.sender = sender;
+        this.senderName = senderName;
     }
 
     public void sendOtp(String recipient, String username, String otp, long expirationMinutes, OtpPurpose purpose) {
-        if (sender.isBlank()) {
-            log.error("OTP email delivery is not configured: spring.mail.username resolved to blank");
+        if (sender == null || sender.isBlank()) {
+            log.error("OTP email delivery is not configured: sender email address resolved to blank");
             throw new ServiceUnavailableException("Verification email service is temporarily unavailable. Please try again shortly.");
         }
         String template = purpose == OtpPurpose.ACCOUNT_VERIFICATION
@@ -47,7 +53,11 @@ public class EmailService {
             ));
             var message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, StandardCharsets.UTF_8.name());
-            helper.setFrom(sender);
+            try {
+                helper.setFrom(sender, senderName);
+            } catch (Exception e) {
+                helper.setFrom(sender);
+            }
             helper.setTo(recipient);
             helper.setSubject(subject);
             helper.setText(body, true);
