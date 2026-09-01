@@ -73,7 +73,10 @@ class AuthServiceTest {
         request.setEmail("user@example.com");
         request.setPassword("password123");
 
-        when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
+        User existingUser = new User();
+        existingUser.setEmail("user@example.com");
+        existingUser.setEmailVerified(true);
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(existingUser));
 
         assertThatThrownBy(() -> authService.register(request, clientInfo))
             .isInstanceOf(DuplicateResourceException.class)
@@ -91,7 +94,7 @@ class AuthServiceTest {
         savedUser.setEmail("user@example.com");
         savedUser.setPassword("encoded-password");
 
-        when(userRepository.existsByEmail("user@example.com")).thenReturn(false);
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("password123")).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
         authService.register(request, clientInfo);

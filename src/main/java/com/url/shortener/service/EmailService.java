@@ -50,7 +50,7 @@ public class EmailService {
             helper.setText(body, true);
             mailSender.send(message);
         } catch (Exception exception) {
-            log.warn("OTP email delivery failed for purpose {}", purpose);
+            log.warn("OTP email delivery failed for purpose {}: {}", purpose, exception.getClass().getSimpleName());
             throw new BadRequestException("Unable to deliver the verification email. Please try again.");
         }
     }

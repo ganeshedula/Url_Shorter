@@ -65,12 +65,18 @@ public class AuthService {
 
     @Transactional
     public RegistrationResponse register(RegisterRequest request, ClientInfo clientInfo) {
-        if (userRepository.existsByEmail(request.getEmail().trim().toLowerCase())) {
-            throw new DuplicateResourceException("Email is already registered");
+        String email = request.getEmail().trim().toLowerCase();
+        User existingUser = userRepository.findByEmail(email).orElse(null);
+        if (existingUser != null) {
+            if (!Boolean.FALSE.equals(existingUser.getEmailVerified())) {
+                throw new DuplicateResourceException("Email is already registered");
+            }
+            otpService.issueOtp(existingUser.getEmail(), existingUser.getUsername(), OtpPurpose.ACCOUNT_VERIFICATION);
+            return RegistrationResponse.builder().email(existingUser.getEmail()).build();
         }
 
         User user = new User();
-        user.setEmail(request.getEmail().trim().toLowerCase());
+        user.setEmail(email);
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(Role.ROLE_USER);
