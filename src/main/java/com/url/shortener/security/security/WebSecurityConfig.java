@@ -65,6 +65,7 @@ public class WebSecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/actuator/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/auth/google", "/api/auth/google/callback").permitAll()
                 .requestMatchers(HttpMethod.GET, "/{shortCode:[a-zA-Z0-9]{6,20}}").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/auth/logout-all").authenticated()

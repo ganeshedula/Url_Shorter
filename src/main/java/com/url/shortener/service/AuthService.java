@@ -23,6 +23,8 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.UUID;
 
 @Service
@@ -72,6 +74,23 @@ public class AuthService {
         );
         SecurityContextHolder.getContext().setAuthentication(authentication);
         User user = userService.findByEmail(request.getEmail().trim().toLowerCase());
+        return buildAuthResponse(user, clientInfo);
+    }
+
+    /**
+     * Reuses the application's users table and JWT/Redis session lifecycle for Google identities.
+     */
+    public AuthResponse loginWithGoogle(String email, String displayName, ClientInfo clientInfo) {
+        String normalizedEmail = email.trim().toLowerCase();
+        User user = userRepository.findByEmail(normalizedEmail).orElseGet(() -> {
+            User newUser = new User();
+            newUser.setEmail(normalizedEmail);
+            newUser.setUsername(displayName == null || displayName.isBlank() ? normalizedEmail : displayName.trim());
+            // The existing schema requires a password. This unguessable value is never returned or used by OAuth.
+            newUser.setPassword(passwordEncoder.encode(generateRandomSecret()));
+            newUser.setRole(Role.ROLE_USER);
+            return userRepository.save(newUser);
+        });
         return buildAuthResponse(user, clientInfo);
     }
 
@@ -156,5 +175,11 @@ public class AuthService {
             .accessTokenExpiresInSeconds(jwtService.getAccessTokenExpiration().toSeconds())
             .user(userService.toResponse(user))
             .build();
+    }
+
+    private String generateRandomSecret() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 }

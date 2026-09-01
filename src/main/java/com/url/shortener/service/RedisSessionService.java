@@ -22,6 +22,7 @@ public class RedisSessionService {
     private static final String SESSION_KEY_PREFIX = "auth:session:";
     private static final String USER_SESSIONS_KEY_PREFIX = "auth:user-sessions:";
     private static final String ACCESS_TOKEN_BLACKLIST_PREFIX = "auth:blacklist:";
+    private static final String GOOGLE_OAUTH_STATE_PREFIX = "auth:google-oauth-state:";
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -76,6 +77,17 @@ public class RedisSessionService {
             return false;
         }
         return Boolean.TRUE.equals(redisTemplate.hasKey(ACCESS_TOKEN_BLACKLIST_PREFIX + tokenId));
+    }
+
+    public void storeGoogleOAuthState(String state, String codeVerifier, Duration ttl) {
+        redisTemplate.opsForValue().set(GOOGLE_OAUTH_STATE_PREFIX + state, codeVerifier, ttl);
+    }
+
+    /**
+     * Returns the PKCE verifier exactly once, preventing OAuth state replay.
+     */
+    public Optional<String> consumeGoogleOAuthState(String state) {
+        return Optional.ofNullable(redisTemplate.opsForValue().getAndDelete(GOOGLE_OAUTH_STATE_PREFIX + state));
     }
 
     private String serialize(RefreshSession session) {

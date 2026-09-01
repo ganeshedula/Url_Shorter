@@ -104,4 +104,47 @@ class AuthServiceTest {
         assertThat(userCaptor.getValue().getPassword()).isEqualTo("encoded-password");
         verify(redisSessionService).storeSession(any());
     }
+
+    @Test
+    void googleLoginUsesExistingUserWithoutCreatingDuplicate() {
+        User existingUser = new User();
+        existingUser.setId(UUID.randomUUID());
+        existingUser.setEmail("user@example.com");
+
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(existingUser));
+        when(jwtService.generateAccessToken(existingUser)).thenReturn("access-token");
+        when(jwtService.generateRefreshToken(any(User.class), any(String.class))).thenReturn("refresh-token");
+        when(jwtService.getAccessTokenExpiration()).thenReturn(Duration.ofMinutes(15));
+        when(jwtService.getRefreshTokenExpiration()).thenReturn(Duration.ofDays(7));
+        when(userService.toResponse(existingUser)).thenReturn(null);
+
+        authService.loginWithGoogle("USER@example.com", "Google User", clientInfo);
+
+        verify(userRepository, org.mockito.Mockito.never()).save(any(User.class));
+        verify(redisSessionService).storeSession(any());
+    }
+
+    @Test
+    void googleLoginCreatesUserInExistingUsersTableWhenEmailIsNew() {
+        User savedUser = new User();
+        savedUser.setId(UUID.randomUUID());
+        savedUser.setEmail("new@example.com");
+
+        when(userRepository.findByEmail("new@example.com")).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenReturn(savedUser);
+        when(passwordEncoder.encode(any(String.class))).thenReturn("random-password-hash");
+        when(jwtService.generateAccessToken(savedUser)).thenReturn("access-token");
+        when(jwtService.generateRefreshToken(any(User.class), any(String.class))).thenReturn("refresh-token");
+        when(jwtService.getAccessTokenExpiration()).thenReturn(Duration.ofMinutes(15));
+        when(jwtService.getRefreshTokenExpiration()).thenReturn(Duration.ofDays(7));
+        when(userService.toResponse(savedUser)).thenReturn(null);
+
+        authService.loginWithGoogle("new@example.com", "New Google User", clientInfo);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getEmail()).isEqualTo("new@example.com");
+        assertThat(userCaptor.getValue().getUsername()).isEqualTo("New Google User");
+        assertThat(userCaptor.getValue().getPassword()).isEqualTo("random-password-hash");
+    }
 }

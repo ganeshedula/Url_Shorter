@@ -5,6 +5,8 @@ import com.url.shortener.dtos.LoginRequest;
 import com.url.shortener.dtos.RegisterRequest;
 import com.url.shortener.security.JwtService;
 import com.url.shortener.service.AuthService;
+import com.url.shortener.service.GoogleOAuthService;
+import com.url.shortener.config.AppProperties;
 import com.url.shortener.service.RedisSessionService;
 import com.url.shortener.service.UserDetailsServiceImpl;
 import com.url.shortener.util.ClientInfo;
@@ -45,6 +47,12 @@ class AuthControllerTest {
 
     @MockBean
     private AuthService authService;
+
+    @MockBean
+    private GoogleOAuthService googleOAuthService;
+
+    @MockBean
+    private AppProperties appProperties;
 
     @MockBean
     private ClientInfoExtractor clientInfoExtractor;

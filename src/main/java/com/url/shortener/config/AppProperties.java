@@ -21,6 +21,7 @@ public class AppProperties {
 
     private Cors cors = new Cors();
     private Jwt jwt = new Jwt();
+    private OAuth oauth = new OAuth();
     private ClientIp clientIp = new ClientIp();
     private GeoIp geoIp = new GeoIp();
 
@@ -37,6 +38,21 @@ public class AppProperties {
         private String secret;
         private Duration accessTokenExpiration = Duration.ofMinutes(15);
         private Duration refreshTokenExpiration = Duration.ofDays(7);
+    }
+
+    @Getter
+    @Setter
+    public static class OAuth {
+        private Google google = new Google();
+    }
+
+    @Getter
+    @Setter
+    public static class Google {
+        private String clientId = "";
+        private String clientSecret = "";
+        private String redirectUri = "http://localhost:8081/api/auth/google/callback";
+        private String frontendUrl = "http://localhost:3000";
     }
 
     @Getter

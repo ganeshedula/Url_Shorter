@@ -168,6 +168,24 @@ If you prefer running the Spring Boot application locally while starting Postgre
 | `APP_BASE_URL` | Base domain/URL used to generate shortened links | `http://localhost:8080` |
 | `APP_CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | `http://localhost:3000,http://localhost:8080` |
 | `JWT_SECRET` | Base64-encoded secret key for signing JWTs | *(Required in Production)* |
+| `GOOGLE_CLIENT_ID` | Google OAuth web-client ID | *(Required for Google sign-in)* |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth web-client secret | *(Required for Google sign-in)* |
+| `GOOGLE_REDIRECT_URI` | Exact backend OAuth callback registered at Google | `http://localhost:8081/api/auth/google/callback` |
+| `FRONTEND_URL` | Trusted frontend origin used after OAuth completes | `http://localhost:3000` |
+
+### Google OAuth setup
+
+Create a **Web application** OAuth client in Google Cloud Console. For a local backend run, add this exact authorized redirect URI:
+
+`http://localhost:8081/api/auth/google/callback`
+
+If the backend runs through the supplied Docker Compose port mapping, add instead:
+
+`http://localhost:8080/api/auth/google/callback`
+
+Set `GOOGLE_REDIRECT_URI` to the URI you registered, and set `FRONTEND_URL` to the exact frontend origin. In production, both must use HTTPS, for example `https://api.example.com/api/auth/google/callback` and `https://app.example.com`. Add the frontend origin to `APP_CORS_ALLOWED_ORIGINS` too.
+
+Google login uses `openid email profile`, validates the returned ID token and verified email, matches existing accounts by the existing unique `users.email`, and issues the same JWT/Redis refresh session as password login. It does not create any database table or store Google access tokens.
 
 ---
 
