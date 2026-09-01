@@ -1,12 +1,14 @@
 package com.url.shortener.service;
 
-import com.url.shortener.exception.BadRequestException;
+import com.url.shortener.exception.ServiceUnavailableException;
 import com.url.shortener.models.OtpPurpose;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.MailAuthenticationException;
+import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
@@ -28,7 +30,8 @@ public class EmailService {
 
     public void sendOtp(String recipient, String username, String otp, long expirationMinutes, OtpPurpose purpose) {
         if (sender.isBlank()) {
-            throw new BadRequestException("Email delivery is not configured");
+            log.error("OTP email delivery is not configured: spring.mail.username resolved to blank");
+            throw new ServiceUnavailableException("Verification email service is temporarily unavailable. Please try again shortly.");
         }
         String template = purpose == OtpPurpose.ACCOUNT_VERIFICATION
             ? "templates/verification-email.html"
@@ -50,8 +53,14 @@ public class EmailService {
             helper.setText(body, true);
             mailSender.send(message);
         } catch (Exception exception) {
-            log.warn("OTP email delivery failed for purpose {}: {}", purpose, exception.getClass().getSimpleName());
-            throw new BadRequestException("Unable to deliver the verification email. Please try again.");
+            log.error("OTP email delivery failed for purpose {} to recipient domain {}: {}",
+                purpose, recipient.substring(recipient.indexOf('@') + 1), exception.getMessage(), exception);
+            String message = exception instanceof MailAuthenticationException
+                ? "Verification email service authentication failed. Please try again shortly."
+                : exception instanceof MailSendException
+                    ? "Verification email service is temporarily unavailable. Please try again shortly."
+                    : "Unable to deliver the verification email. Please try again shortly.";
+            throw new ServiceUnavailableException(message, exception);
         }
     }
 

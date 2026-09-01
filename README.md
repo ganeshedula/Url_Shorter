@@ -162,9 +162,11 @@ If you prefer running the Spring Boot application locally while starting Postgre
 | `DB_URL` | PostgreSQL JDBC Connection String | `jdbc:postgresql://localhost:5432/url_shortener` |
 | `DB_USERNAME` | PostgreSQL database user | `postgres` |
 | `DB_PASSWORD` | PostgreSQL database password | `postgres` |
+| `JPA_DDL_AUTO` | Hibernate schema mode; use `validate` for an existing production database | `update` |
 | `REDIS_HOST` | Hostname for Redis instance | `localhost` |
 | `REDIS_PORT` | Port for Redis instance | `6379` |
 | `REDIS_PASSWORD` | Access password for Redis instance | *(empty)* |
+| `REDIS_SSL_ENABLED` | Enable TLS for a managed Redis service | `false` |
 | `APP_BASE_URL` | Base domain/URL used to generate shortened links | `http://localhost:8080` |
 | `APP_CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | `http://localhost:3000,http://localhost:8080` |
 | `JWT_SECRET` | Base64-encoded secret key for signing JWTs | *(Required in Production)* |
@@ -179,6 +181,20 @@ If you prefer running the Spring Boot application locally while starting Postgre
 | `OTP_RESET_AUTHORIZATION_EXPIRATION` | Password-reset authorization validity | `PT15M` |
 | `OTP_RESEND_COOLDOWN` | Minimum wait before requesting another OTP | `PT60S` |
 | `OTP_MAX_ATTEMPTS` | Maximum invalid OTP attempts | `5` |
+
+### Email delivery setup
+
+For Gmail, `MAIL_USERNAME` must be the Gmail address that sends the email and `MAIL_APP_PASSWORD` must be a 16-character Google App Password (not the normal Google account password). Enable two-step verification first, then create an App Password in the Google Account security settings. Add both values to `.env` before starting Docker Compose; the app container now receives them explicitly. Never commit this file or the app password.
+
+For a direct local Spring Boot launch, run from `url-shorter-sb`. The application imports an optional local `.env` file, so the same `MAIL_*` and `REDIS_*` settings are resolved without exporting secrets into the shell. Start Redis before registering an account (for example, `docker compose up -d redis`); a Redis connection error means no OTP is generated or emailed.
+
+Verification OTPs, attempt counters, resend cooldowns, and password-reset authorizations are stored in Redis with automatic expiry. PostgreSQL is no longer used for active OTP state.
+
+### Render Redis setup
+
+For a Render Key Value instance, use the host, port, and password from its **Connect** menu as `REDIS_HOST`, `REDIS_PORT`, and `REDIS_PASSWORD` on the backend Web Service. Keep the backend and Key Value service in the same Render region. Set `REDIS_SSL_ENABLED=false` for the internal `redis://` endpoint, or `true` for an external TLS endpoint.
+
+For an existing Render Postgres database, set `JPA_DDL_AUTO=validate` on the backend service. This avoids running Hibernate schema updates during every production boot and shortens startup time. Use `update` only for initial local development or a deliberate schema update.
 
 ### Google OAuth setup
 

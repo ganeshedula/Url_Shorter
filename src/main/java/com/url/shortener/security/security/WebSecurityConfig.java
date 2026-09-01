@@ -99,7 +99,19 @@ public class WebSecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(appProperties.getCors().getAllowedOrigins());
+        List<String> origins = appProperties.getCors().getAllowedOrigins().stream()
+            .filter(origin -> origin != null && !origin.isBlank())
+            .flatMap(origin -> {
+                String trimmed = origin.trim();
+                if (trimmed.endsWith("/")) {
+                    return java.util.stream.Stream.of(trimmed, trimmed.substring(0, trimmed.length() - 1));
+                } else {
+                    return java.util.stream.Stream.of(trimmed, trimmed + "/");
+                }
+            })
+            .distinct()
+            .toList();
+        configuration.setAllowedOrigins(origins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Location"));
