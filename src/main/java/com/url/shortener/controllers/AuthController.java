@@ -5,6 +5,11 @@ import com.url.shortener.dtos.AuthResponse;
 import com.url.shortener.dtos.LoginRequest;
 import com.url.shortener.dtos.RefreshTokenRequest;
 import com.url.shortener.dtos.RegisterRequest;
+import com.url.shortener.dtos.RegistrationResponse;
+import com.url.shortener.dtos.EmailRequest;
+import com.url.shortener.dtos.OtpVerificationRequest;
+import com.url.shortener.dtos.ResetAuthorizationResponse;
+import com.url.shortener.dtos.ResetPasswordRequest;
 import com.url.shortener.dtos.UserResponse;
 import com.url.shortener.config.AppProperties;
 import com.url.shortener.service.AuthService;
@@ -51,12 +56,49 @@ public class AuthController {
 
     @PostMapping("/register")
     @Operation(summary = "Register a new user")
-    public ResponseEntity<ApiResponse<AuthResponse>> register(
+    public ResponseEntity<ApiResponse<RegistrationResponse>> register(
         @Valid @RequestBody RegisterRequest request,
         HttpServletRequest httpServletRequest
     ) {
-        AuthResponse response = authService.register(request, clientInfoExtractor.extract(httpServletRequest));
-        return ResponseEntity.ok(ApiResponse.success("User registered successfully", response));
+        RegistrationResponse response = authService.register(request, clientInfoExtractor.extract(httpServletRequest));
+        return ResponseEntity.ok(ApiResponse.success("Verification code sent. Verify your email to finish creating your account.", response));
+    }
+
+    @PostMapping("/verify-registration-otp")
+    @Operation(summary = "Verify a registration email code and issue JWT tokens")
+    public ResponseEntity<ApiResponse<AuthResponse>> verifyRegistrationOtp(
+        @Valid @RequestBody OtpVerificationRequest request,
+        HttpServletRequest httpServletRequest
+    ) {
+        AuthResponse response = authService.verifyRegistration(request.getEmail(), request.getOtp(), clientInfoExtractor.extract(httpServletRequest));
+        return ResponseEntity.ok(ApiResponse.success("Email verified successfully", response));
+    }
+
+    @PostMapping("/resend-otp")
+    @Operation(summary = "Resend an account-verification code")
+    public ResponseEntity<ApiResponse<Void>> resendOtp(@Valid @RequestBody EmailRequest request) {
+        authService.resendVerification(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.success("A new verification code has been sent", null));
+    }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Request a password-reset verification code")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody EmailRequest request) {
+        authService.requestPasswordReset(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.success("If an account exists for this email, a verification code has been sent.", null));
+    }
+
+    @PostMapping("/verify-reset-otp")
+    @Operation(summary = "Verify a password-reset code")
+    public ResponseEntity<ApiResponse<ResetAuthorizationResponse>> verifyResetOtp(@Valid @RequestBody OtpVerificationRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Verification code accepted", authService.verifyResetOtp(request.getEmail(), request.getOtp())));
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Reset password using a one-time reset authorization")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success("Password updated successfully", null));
     }
 
     @PostMapping("/login")

@@ -43,6 +43,10 @@ public class User extends BaseEntity {
     @Column(name = "token_version", nullable = false)
     private long tokenVersion = 0L;
 
+    /** Null is treated as verified for accounts created before email verification existed. */
+    @Column(name = "email_verified")
+    private Boolean emailVerified = true;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UrlMapping> urlMappings = new ArrayList<>();
 

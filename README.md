@@ -172,6 +172,13 @@ If you prefer running the Spring Boot application locally while starting Postgre
 | `GOOGLE_CLIENT_SECRET` | Google OAuth web-client secret | *(Required for Google sign-in)* |
 | `GOOGLE_REDIRECT_URI` | Exact backend OAuth callback registered at Google | `http://localhost:8081/api/auth/google/callback` |
 | `FRONTEND_URL` | Trusted frontend origin used after OAuth completes | `http://localhost:3000` |
+| `MAIL_USERNAME` | SMTP sender email address | *(Required for OTP email delivery)* |
+| `MAIL_APP_PASSWORD` | SMTP/Gmail app password | *(Required for OTP email delivery)* |
+| `MAIL_HOST` / `MAIL_PORT` | SMTP host and port | `smtp.gmail.com` / `587` |
+| `OTP_EXPIRATION` | OTP validity duration | `PT10M` |
+| `OTP_RESET_AUTHORIZATION_EXPIRATION` | Password-reset authorization validity | `PT15M` |
+| `OTP_RESEND_COOLDOWN` | Minimum wait before requesting another OTP | `PT60S` |
+| `OTP_MAX_ATTEMPTS` | Maximum invalid OTP attempts | `5` |
 
 ### Google OAuth setup
 
@@ -212,7 +219,12 @@ An updated Postman collection is included in the project for seamless API testin
 
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| `POST` | `/api/auth/register` | Register a new user account | 🔓 Public |
+| `POST` | `/api/auth/register` | Register and send an email-verification OTP | 🔓 Public |
+| `POST` | `/api/auth/verify-registration-otp` | Verify registration OTP and issue JWT tokens | 🔓 Public |
+| `POST` | `/api/auth/resend-otp` | Resend an account-verification OTP | 🔓 Public |
+| `POST` | `/api/auth/forgot-password` | Request a password-reset OTP (enumeration-safe) | 🔓 Public |
+| `POST` | `/api/auth/verify-reset-otp` | Verify a password-reset OTP and obtain a reset authorization | 🔓 Public |
+| `POST` | `/api/auth/reset-password` | Set a new password using one-time reset authorization | 🔓 Public |
 | `POST` | `/api/auth/login` | Authenticate user and issue JWT access/refresh tokens | 🔓 Public |
 | `POST` | `/api/auth/refresh` | Obtain a new access token using a valid refresh token | 🔓 Public |
 | `POST` | `/api/auth/logout` | Revoke current refresh token session | 🔒 Bearer |

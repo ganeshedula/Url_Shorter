@@ -48,6 +48,9 @@ class AuthServiceTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private OtpService otpService;
+
     @InjectMocks
     private AuthService authService;
 
@@ -78,7 +81,7 @@ class AuthServiceTest {
     }
 
     @Test
-    void registerEncodesPasswordAndStoresSession() {
+    void registerEncodesPasswordAndSendsVerificationOtp() {
         RegisterRequest request = new RegisterRequest();
         request.setEmail("user@example.com");
         request.setPassword("password123");
@@ -91,18 +94,12 @@ class AuthServiceTest {
         when(userRepository.existsByEmail("user@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
-        when(jwtService.generateAccessToken(savedUser)).thenReturn("access-token");
-        when(jwtService.generateRefreshToken(any(User.class), any(String.class))).thenReturn("refresh-token");
-        when(jwtService.getAccessTokenExpiration()).thenReturn(Duration.ofMinutes(15));
-        when(jwtService.getRefreshTokenExpiration()).thenReturn(Duration.ofDays(7));
-        when(userService.toResponse(savedUser)).thenReturn(null);
-
         authService.register(request, clientInfo);
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
         assertThat(userCaptor.getValue().getPassword()).isEqualTo("encoded-password");
-        verify(redisSessionService).storeSession(any());
+        verify(otpService).issueOtp("user@example.com", null, com.url.shortener.models.OtpPurpose.ACCOUNT_VERIFICATION);
     }
 
     @Test

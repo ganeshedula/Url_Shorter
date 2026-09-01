@@ -4,10 +4,16 @@ import com.url.shortener.dtos.AuthResponse;
 import com.url.shortener.dtos.LoginRequest;
 import com.url.shortener.dtos.RefreshTokenRequest;
 import com.url.shortener.dtos.RegisterRequest;
+import com.url.shortener.dtos.RegistrationResponse;
+import com.url.shortener.dtos.ResetAuthorizationResponse;
+import com.url.shortener.dtos.ResetPasswordRequest;
 import com.url.shortener.dtos.UserResponse;
 import com.url.shortener.exception.DuplicateResourceException;
+import com.url.shortener.exception.BadRequestException;
 import com.url.shortener.exception.InvalidTokenException;
+import com.url.shortener.exception.UnauthorizedException;
 import com.url.shortener.models.RefreshSession;
+import com.url.shortener.models.OtpPurpose;
 import com.url.shortener.models.Role;
 import com.url.shortener.models.User;
 import com.url.shortener.repo.UserRepository;
@@ -19,6 +25,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -36,6 +43,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final RedisSessionService redisSessionService;
     private final UserService userService;
+    private final OtpService otpService;
 
     public AuthService(
         UserRepository userRepository,
@@ -43,7 +51,8 @@ public class AuthService {
         AuthenticationManager authenticationManager,
         JwtService jwtService,
         RedisSessionService redisSessionService,
-        UserService userService
+        UserService userService,
+        OtpService otpService
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -51,10 +60,12 @@ public class AuthService {
         this.jwtService = jwtService;
         this.redisSessionService = redisSessionService;
         this.userService = userService;
+        this.otpService = otpService;
     }
 
-    public AuthResponse register(RegisterRequest request, ClientInfo clientInfo) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+    @Transactional
+    public RegistrationResponse register(RegisterRequest request, ClientInfo clientInfo) {
+        if (userRepository.existsByEmail(request.getEmail().trim().toLowerCase())) {
             throw new DuplicateResourceException("Email is already registered");
         }
 
@@ -63,17 +74,21 @@ public class AuthService {
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(Role.ROLE_USER);
+        user.setEmailVerified(false);
         User savedUser = userRepository.save(user);
-
-        return buildAuthResponse(savedUser, clientInfo);
+        otpService.issueOtp(savedUser.getEmail(), savedUser.getUsername(), OtpPurpose.ACCOUNT_VERIFICATION);
+        return RegistrationResponse.builder().email(savedUser.getEmail()).build();
     }
 
     public AuthResponse login(LoginRequest request, ClientInfo clientInfo) {
+        User user = userService.findByEmail(request.getEmail().trim().toLowerCase());
+        if (Boolean.FALSE.equals(user.getEmailVerified())) {
+            throw new UnauthorizedException("Verify your email before signing in");
+        }
         Authentication authentication = authenticationManager.authenticate(
             new UsernamePasswordAuthenticationToken(request.getEmail().trim().toLowerCase(), request.getPassword())
         );
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        User user = userService.findByEmail(request.getEmail().trim().toLowerCase());
         return buildAuthResponse(user, clientInfo);
     }
 
@@ -89,9 +104,59 @@ public class AuthService {
             // The existing schema requires a password. This unguessable value is never returned or used by OAuth.
             newUser.setPassword(passwordEncoder.encode(generateRandomSecret()));
             newUser.setRole(Role.ROLE_USER);
+            newUser.setEmailVerified(true);
             return userRepository.save(newUser);
         });
+        if (Boolean.FALSE.equals(user.getEmailVerified())) {
+            user.setEmailVerified(true);
+            userRepository.save(user);
+        }
         return buildAuthResponse(user, clientInfo);
+    }
+
+    @Transactional
+    public AuthResponse verifyRegistration(String email, String otp, ClientInfo clientInfo) {
+        User user = userService.findByEmail(email.trim().toLowerCase());
+        if (Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new BadRequestException("Email is already verified");
+        }
+        otpService.verifyOtp(user.getEmail(), otp, OtpPurpose.ACCOUNT_VERIFICATION);
+        user.setEmailVerified(true);
+        userRepository.save(user);
+        return buildAuthResponse(user, clientInfo);
+    }
+
+    @Transactional
+    public void resendVerification(String email) {
+        User user = userService.findByEmail(email.trim().toLowerCase());
+        if (Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new BadRequestException("Email is already verified");
+        }
+        otpService.issueOtp(user.getEmail(), user.getUsername(), OtpPurpose.ACCOUNT_VERIFICATION);
+    }
+
+    @Transactional
+    public void requestPasswordReset(String email) {
+        userRepository.findByEmail(email.trim().toLowerCase())
+            .filter(user -> !Boolean.FALSE.equals(user.getEmailVerified()))
+            .ifPresent(user -> otpService.issueOtp(user.getEmail(), user.getUsername(), OtpPurpose.PASSWORD_RESET));
+    }
+
+    public ResetAuthorizationResponse verifyResetOtp(String email, String otp) {
+        return ResetAuthorizationResponse.builder()
+            .resetToken(otpService.verifyOtp(email, otp, OtpPurpose.PASSWORD_RESET))
+            .build();
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        String email = request.getEmail().trim().toLowerCase();
+        otpService.consumeResetAuthorization(email, request.getResetToken());
+        User user = userService.findByEmail(email);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setTokenVersion(user.getTokenVersion() + 1);
+        userRepository.save(user);
+        redisSessionService.invalidateAllSessions(user.getId());
     }
 
     public AuthResponse refresh(RefreshTokenRequest request, ClientInfo clientInfo) {
