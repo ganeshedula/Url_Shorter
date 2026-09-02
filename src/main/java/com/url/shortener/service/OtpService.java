@@ -3,6 +3,8 @@ package com.url.shortener.service;
 import com.url.shortener.config.AppProperties;
 import com.url.shortener.exception.BadRequestException;
 import com.url.shortener.models.OtpPurpose;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -20,23 +22,27 @@ public class OtpService {
     private static final String ATTEMPTS_PREFIX = "auth:otp-attempts:";
     private static final String COOLDOWN_PREFIX = "auth:otp-cooldown:";
     private static final String RESET_AUTHORIZATION_PREFIX = "auth:password-reset:";
+    private static final String PENDING_REGISTRATION_PREFIX = "auth:pending-registration:";
 
     private final StringRedisTemplate redisTemplate;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final AppProperties appProperties;
+    private final ObjectMapper objectMapper;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public OtpService(
         StringRedisTemplate redisTemplate,
         PasswordEncoder passwordEncoder,
         EmailService emailService,
-        AppProperties appProperties
+        AppProperties appProperties,
+        ObjectMapper objectMapper
     ) {
         this.redisTemplate = redisTemplate;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
         this.appProperties = appProperties;
+        this.objectMapper = objectMapper;
     }
 
     public void issueOtp(String email, String username, OtpPurpose purpose) {
@@ -58,6 +64,44 @@ public class OtpService {
             redisTemplate.delete(java.util.List.of(otpKey, attemptsKey(normalizedEmail, purpose), cooldownKey));
             throw exception;
         }
+    }
+
+    /**
+     * Keeps a new registration out of the users table until the emailed code is
+     * verified. The password is already hashed; plaintext registration data is
+     * never put in Redis.
+     */
+    public void startPendingRegistration(String email, String username, String passwordHash) {
+        String normalizedEmail = email.trim().toLowerCase();
+        String key = pendingRegistrationKey(normalizedEmail);
+        try {
+            String payload = objectMapper.writeValueAsString(new PendingRegistration(username, passwordHash));
+            redisTemplate.opsForValue().set(key, payload, appProperties.getOtp().getExpiration());
+            issueOtp(normalizedEmail, username, OtpPurpose.ACCOUNT_VERIFICATION);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Unable to prepare registration verification", exception);
+        } catch (RuntimeException exception) {
+            // If delivery fails, no pending credential should remain.
+            redisTemplate.delete(key);
+            throw exception;
+        }
+    }
+
+    public PendingRegistration getPendingRegistration(String email) {
+        String payload = redisTemplate.opsForValue().get(pendingRegistrationKey(email.trim().toLowerCase()));
+        if (payload == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(payload, PendingRegistration.class);
+        } catch (JsonProcessingException exception) {
+            redisTemplate.delete(pendingRegistrationKey(email.trim().toLowerCase()));
+            throw new BadRequestException("Registration verification has expired. Please register again.");
+        }
+    }
+
+    public void clearPendingRegistration(String email) {
+        redisTemplate.delete(pendingRegistrationKey(email.trim().toLowerCase()));
     }
 
     public String verifyOtp(String email, String otp, OtpPurpose purpose) {
@@ -122,6 +166,13 @@ public class OtpService {
 
     private String resetAuthorizationKey(String email) {
         return RESET_AUTHORIZATION_PREFIX + emailFingerprint(email);
+    }
+
+    private String pendingRegistrationKey(String email) {
+        return PENDING_REGISTRATION_PREFIX + emailFingerprint(email);
+    }
+
+    public record PendingRegistration(String username, String passwordHash) {
     }
 
     private String emailFingerprint(String email) {

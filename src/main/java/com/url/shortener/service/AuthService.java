@@ -12,6 +12,7 @@ import com.url.shortener.exception.DuplicateResourceException;
 import com.url.shortener.exception.BadRequestException;
 import com.url.shortener.exception.InvalidTokenException;
 import com.url.shortener.exception.UnauthorizedException;
+import com.url.shortener.exception.UserNotFoundException;
 import com.url.shortener.models.RefreshSession;
 import com.url.shortener.models.OtpPurpose;
 import com.url.shortener.models.Role;
@@ -75,15 +76,17 @@ public class AuthService {
             return RegistrationResponse.builder().email(existingUser.getEmail()).build();
         }
 
-        User user = new User();
-        user.setEmail(email);
-        user.setUsername(request.getUsername());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(Role.ROLE_USER);
-        user.setEmailVerified(false);
-        User savedUser = userRepository.save(user);
-        otpService.issueOtp(savedUser.getEmail(), savedUser.getUsername(), OtpPurpose.ACCOUNT_VERIFICATION);
-        return RegistrationResponse.builder().email(savedUser.getEmail()).build();
+        // A user may submit the registration form again while its original code
+        // is active. Preserve the original hashed credentials instead of
+        // replacing them or invalidating the code already sent.
+        OtpService.PendingRegistration pendingRegistration = otpService.getPendingRegistration(email);
+        if (pendingRegistration != null) {
+            otpService.issueOtp(email, pendingRegistration.username(), OtpPurpose.ACCOUNT_VERIFICATION);
+            return RegistrationResponse.builder().email(email).build();
+        }
+
+        otpService.startPendingRegistration(email, request.getUsername(), passwordEncoder.encode(request.getPassword()));
+        return RegistrationResponse.builder().email(email).build();
     }
 
     public AuthResponse login(LoginRequest request, ClientInfo clientInfo) {
@@ -122,30 +125,59 @@ public class AuthService {
 
     @Transactional
     public AuthResponse verifyRegistration(String email, String otp, ClientInfo clientInfo) {
-        User user = userService.findByEmail(email.trim().toLowerCase());
-        if (Boolean.TRUE.equals(user.getEmailVerified())) {
+        String normalizedEmail = email.trim().toLowerCase();
+        User user = userRepository.findByEmail(normalizedEmail).orElse(null);
+        if (user != null && Boolean.TRUE.equals(user.getEmailVerified())) {
             throw new BadRequestException("Email is already verified");
         }
-        otpService.verifyOtp(user.getEmail(), otp, OtpPurpose.ACCOUNT_VERIFICATION);
+
+        OtpService.PendingRegistration pendingRegistration = user == null
+            ? otpService.getPendingRegistration(normalizedEmail)
+            : null;
+        if (user == null && pendingRegistration == null) {
+            throw new BadRequestException("Registration verification has expired. Please register again.");
+        }
+
+        otpService.verifyOtp(normalizedEmail, otp, OtpPurpose.ACCOUNT_VERIFICATION);
+        if (user == null) {
+            user = new User();
+            user.setEmail(normalizedEmail);
+            user.setUsername(pendingRegistration.username());
+            user.setPassword(pendingRegistration.passwordHash());
+            user.setRole(Role.ROLE_USER);
+        }
         user.setEmailVerified(true);
-        userRepository.save(user);
+        user = userRepository.save(user);
+        otpService.clearPendingRegistration(normalizedEmail);
         return buildAuthResponse(user, clientInfo);
     }
 
     @Transactional
     public void resendVerification(String email) {
-        User user = userService.findByEmail(email.trim().toLowerCase());
-        if (Boolean.TRUE.equals(user.getEmailVerified())) {
+        String normalizedEmail = email.trim().toLowerCase();
+        User user = userRepository.findByEmail(normalizedEmail).orElse(null);
+        if (user != null && Boolean.TRUE.equals(user.getEmailVerified())) {
             throw new BadRequestException("Email is already verified");
         }
-        otpService.issueOtp(user.getEmail(), user.getUsername(), OtpPurpose.ACCOUNT_VERIFICATION);
+        if (user != null) {
+            otpService.issueOtp(user.getEmail(), user.getUsername(), OtpPurpose.ACCOUNT_VERIFICATION);
+            return;
+        }
+        OtpService.PendingRegistration pendingRegistration = otpService.getPendingRegistration(normalizedEmail);
+        if (pendingRegistration == null) {
+            throw new BadRequestException("Registration verification has expired. Please register again.");
+        }
+        otpService.issueOtp(normalizedEmail, pendingRegistration.username(), OtpPurpose.ACCOUNT_VERIFICATION);
     }
 
     @Transactional
     public void requestPasswordReset(String email) {
-        userRepository.findByEmail(email.trim().toLowerCase())
-            .filter(user -> !Boolean.FALSE.equals(user.getEmailVerified()))
-            .ifPresent(user -> otpService.issueOtp(user.getEmail(), user.getUsername(), OtpPurpose.PASSWORD_RESET));
+        User user = userRepository.findByEmail(email.trim().toLowerCase())
+            .orElseThrow(() -> new UserNotFoundException("No account exists for this email address"));
+        if (Boolean.FALSE.equals(user.getEmailVerified())) {
+            throw new BadRequestException("Verify your email before resetting your password");
+        }
+        otpService.issueOtp(user.getEmail(), user.getUsername(), OtpPurpose.PASSWORD_RESET);
     }
 
     public ResetAuthorizationResponse verifyResetOtp(String email, String otp) {

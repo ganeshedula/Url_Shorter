@@ -1,5 +1,6 @@
 package com.url.shortener.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.url.shortener.config.AppProperties;
 import com.url.shortener.models.OtpPurpose;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,7 +46,7 @@ class OtpServiceTest {
         appProperties.getOtp().setResendCooldown(Duration.ofMinutes(1));
         appProperties.getOtp().setMaxAttempts(5);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        otpService = new OtpService(redisTemplate, passwordEncoder, emailService, appProperties);
+        otpService = new OtpService(redisTemplate, passwordEncoder, emailService, appProperties, new ObjectMapper());
     }
 
     @Test

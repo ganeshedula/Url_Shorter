@@ -24,6 +24,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -84,25 +86,43 @@ class AuthServiceTest {
     }
 
     @Test
-    void registerEncodesPasswordAndSendsVerificationOtp() {
+    void registerKeepsNewUserPendingUntilItsVerificationOtpIsAccepted() {
         RegisterRequest request = new RegisterRequest();
         request.setEmail("user@example.com");
         request.setPassword("password123");
 
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("password123")).thenReturn("encoded-password");
+        authService.register(request, clientInfo);
+
+        verify(userRepository, never()).save(any(User.class));
+        verify(otpService).startPendingRegistration("user@example.com", null, "encoded-password");
+    }
+
+    @Test
+    void verifiedPendingRegistrationCreatesTheUserThenIssuesItsNormalSession() {
         User savedUser = new User();
         savedUser.setId(UUID.randomUUID());
         savedUser.setEmail("user@example.com");
-        savedUser.setPassword("encoded-password");
+        savedUser.setEmailVerified(true);
 
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode("password123")).thenReturn("encoded-password");
+        when(otpService.getPendingRegistration("user@example.com"))
+            .thenReturn(new OtpService.PendingRegistration("User", "encoded-password"));
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
-        authService.register(request, clientInfo);
+        when(jwtService.generateAccessToken(savedUser)).thenReturn("access-token");
+        when(jwtService.generateRefreshToken(any(User.class), any(String.class))).thenReturn("refresh-token");
+        when(jwtService.getAccessTokenExpiration()).thenReturn(Duration.ofMinutes(15));
+        when(jwtService.getRefreshTokenExpiration()).thenReturn(Duration.ofDays(7));
+        when(userService.toResponse(savedUser)).thenReturn(null);
 
-        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(userCaptor.capture());
-        assertThat(userCaptor.getValue().getPassword()).isEqualTo("encoded-password");
-        verify(otpService).issueOtp("user@example.com", null, com.url.shortener.models.OtpPurpose.ACCOUNT_VERIFICATION);
+        authService.verifyRegistration("USER@example.com", "123456", clientInfo);
+
+        var order = inOrder(otpService, userRepository);
+        order.verify(otpService).verifyOtp("user@example.com", "123456", com.url.shortener.models.OtpPurpose.ACCOUNT_VERIFICATION);
+        order.verify(userRepository).save(any(User.class));
+        order.verify(otpService).clearPendingRegistration("user@example.com");
+        verify(redisSessionService).storeSession(any());
     }
 
     @Test
