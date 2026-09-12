@@ -55,7 +55,7 @@ public class UrlMappingController {
         @Valid @RequestBody CreateShortUrlRequest request,
         Principal principal
     ) {
-        User user = userService.findByEmail(principal.getName());
+        User user = resolveUser(principal);
         ShortUrlResponse response = urlMappingService.createShortUrl(request.getUrl(), request.getExpirationDate(), user);
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(ApiResponse.success("Short URL created successfully", response));
@@ -73,7 +73,7 @@ public class UrlMappingController {
     @GetMapping("/api/url/{id}")
     @Operation(summary = "Get URL analytics by ID")
     public ResponseEntity<ApiResponse<UrlAnalyticsResponse>> getUrlById(@PathVariable UUID id, Principal principal) {
-        User user = userService.findByEmail(principal.getName());
+        User user = resolveUser(principal);
         return ResponseEntity.ok(ApiResponse.success("URL analytics fetched successfully", urlMappingService.getUrlAnalytics(id, user)));
     }
 
@@ -84,14 +84,14 @@ public class UrlMappingController {
         @Valid @RequestBody UpdateUrlRequest request,
         Principal principal
     ) {
-        User user = userService.findByEmail(principal.getName());
+        User user = resolveUser(principal);
         return ResponseEntity.ok(ApiResponse.success("Short URL updated successfully", urlMappingService.updateUrl(id, request, user)));
     }
 
     @DeleteMapping("/api/url/{id}")
     @Operation(summary = "Delete a short URL")
     public ResponseEntity<ApiResponse<Void>> deleteUrl(@PathVariable UUID id, Principal principal) {
-        User user = userService.findByEmail(principal.getName());
+        User user = resolveUser(principal);
         urlMappingService.deleteUrl(id, user);
         return ResponseEntity.ok(ApiResponse.success("Short URL deleted successfully", null));
     }
@@ -106,10 +106,19 @@ public class UrlMappingController {
         @RequestParam(defaultValue = "desc") String direction,
         @RequestParam(required = false) String search
     ) {
-        User user = userService.findByEmail(principal.getName());
+        User user = resolveUser(principal);
         return ResponseEntity.ok(ApiResponse.success(
             "Short URLs fetched successfully",
             urlMappingService.getUrlsByUser(user, page, size, sortBy, direction, search)
         ));
+    }
+
+    private User resolveUser(Principal principal) {
+        if (principal instanceof org.springframework.security.core.Authentication authentication
+            && authentication.getPrincipal() instanceof com.url.shortener.service.UserDetailsImpl userDetails
+            && userDetails.getUser() != null) {
+            return userDetails.getUser();
+        }
+        return userService.findByEmail(principal.getName());
     }
 }

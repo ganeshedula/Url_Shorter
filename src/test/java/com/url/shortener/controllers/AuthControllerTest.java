@@ -66,6 +66,12 @@ class AuthControllerTest {
     @MockBean
     private RedisSessionService redisSessionService;
 
+    @MockBean
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+
+    @MockBean
+    private com.url.shortener.security.RateLimitFilter rateLimitFilter;
+
     @Test
     void registerReturnsBadRequestForInvalidPayload() throws Exception {
         RegisterRequest request = new RegisterRequest();

@@ -25,6 +25,7 @@ public class AppProperties {
     private Otp otp = new Otp();
     private ClientIp clientIp = new ClientIp();
     private GeoIp geoIp = new GeoIp();
+    private RateLimit rateLimit = new RateLimit();
 
     @Getter
     @Setter
@@ -80,5 +81,14 @@ public class AppProperties {
         private Duration connectTimeout = Duration.ofMillis(500);
         private Duration readTimeout = Duration.ofMillis(1200);
         private Duration cacheTtl = Duration.ofHours(6);
+    }
+
+    @Getter
+    @Setter
+    public static class RateLimit {
+        private boolean enabled = true;
+        private int authRequestsPerMinute = 30;
+        private int urlCreateRequestsPerMinute = 60;
+        private int redirectRequestsPerMinute = 300;
     }
 }

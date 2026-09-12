@@ -18,13 +18,19 @@ public class UserDetailsImpl implements UserDetails {
     private final String password;
     private final long tokenVersion;
     private final Collection<? extends GrantedAuthority> authorities;
+    private final User user;
 
     public UserDetailsImpl(UUID id, String email, String password, long tokenVersion, Collection<? extends GrantedAuthority> authorities) {
+        this(id, email, password, tokenVersion, authorities, null);
+    }
+
+    public UserDetailsImpl(UUID id, String email, String password, long tokenVersion, Collection<? extends GrantedAuthority> authorities, User user) {
         this.id = id;
         this.email = email;
         this.password = password;
         this.tokenVersion = tokenVersion;
         this.authorities = authorities;
+        this.user = user;
     }
 
     public static UserDetailsImpl fromUser(User user) {
@@ -33,7 +39,8 @@ public class UserDetailsImpl implements UserDetails {
             user.getEmail(),
             user.getPassword(),
             user.getTokenVersion(),
-            List.of(new SimpleGrantedAuthority(user.getRole().name()))
+            List.of(new SimpleGrantedAuthority(user.getRole().name())),
+            user
         );
     }
 

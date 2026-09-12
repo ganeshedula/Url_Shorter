@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.Getter;
@@ -17,7 +18,12 @@ import java.util.UUID;
 @Getter
 @Setter
 @Entity
-@Table(name = "otp_verifications")
+@Table(
+    name = "otp_verifications",
+    indexes = {
+        @Index(name = "idx_otp_email_purpose_created_at", columnList = "email,purpose,created_at")
+    }
+)
 public class OtpVerification extends BaseEntity {
 
     @Id

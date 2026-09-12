@@ -4,6 +4,7 @@ import com.url.shortener.exception.InvalidTokenException;
 import com.url.shortener.service.RedisSessionService;
 import com.url.shortener.service.UserDetailsImpl;
 import com.url.shortener.service.UserDetailsServiceImpl;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -50,15 +51,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = header.substring(7);
         try {
-            if (!jwtService.isTokenValid(token, JwtService.TOKEN_TYPE_ACCESS)) {
+            Claims claims = jwtService.extractClaims(token);
+            if (!JwtService.TOKEN_TYPE_ACCESS.equals(claims.get(JwtService.CLAIM_TOKEN_TYPE, String.class))
+                || claims.getExpiration() == null
+                || claims.getExpiration().toInstant().isBefore(java.time.Instant.now())) {
                 throw new InvalidTokenException("Invalid access token");
             }
-            if (redisSessionService.isAccessTokenBlacklisted(jwtService.extractId(token))) {
+            String tokenId = claims.getId();
+            if (redisSessionService.isAccessTokenBlacklisted(tokenId)) {
                 throw new InvalidTokenException("Token has been invalidated");
             }
-            String email = jwtService.extractEmail(token);
+            String email = claims.get(JwtService.CLAIM_EMAIL, String.class);
             UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByUsername(email);
-            if (jwtService.extractTokenVersion(token) != userDetails.getTokenVersion()) {
+            Long tokenVersion = claims.get(JwtService.CLAIM_TOKEN_VERSION, Long.class);
+            long version = tokenVersion == null ? 0L : tokenVersion;
+            if (version != userDetails.getTokenVersion()) {
                 throw new InvalidTokenException("Token has been globally invalidated");
             }
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(

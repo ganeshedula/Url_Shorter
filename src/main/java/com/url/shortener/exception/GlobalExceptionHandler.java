@@ -81,6 +81,56 @@ public class GlobalExceptionHandler {
             .body(ApiResponse.failure(exception.getMessage(), List.of()));
     }
 
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMalformedJson(org.springframework.http.converter.HttpMessageNotReadableException exception) {
+        log.debug("Malformed JSON received: {}", exception.getMessage());
+        return ResponseEntity.badRequest()
+            .body(ApiResponse.failure("Malformed JSON request body", List.of("Request body could not be read or is invalid JSON.")));
+    }
+
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Object>> handleTypeMismatch(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException exception) {
+        String paramName = exception.getName();
+        return ResponseEntity.badRequest()
+            .body(ApiResponse.failure("Invalid parameter format", List.of("Parameter '" + paramName + "' has an invalid value.")));
+    }
+
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMissingParam(org.springframework.web.bind.MissingServletRequestParameterException exception) {
+        return ResponseEntity.badRequest()
+            .body(ApiResponse.failure("Missing required parameter", List.of("Parameter '" + exception.getParameterName() + "' is required.")));
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMethodNotSupported(org.springframework.web.HttpRequestMethodNotSupportedException exception) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+            .body(ApiResponse.failure("Method not allowed", List.of(exception.getMethod() + " method is not supported for this endpoint.")));
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMediaTypeNotSupported(org.springframework.web.HttpMediaTypeNotSupportedException exception) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+            .body(ApiResponse.failure("Unsupported media type", List.of("Content-Type is not supported.")));
+    }
+
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Object>> handleNoResourceFound(org.springframework.web.servlet.resource.NoResourceFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(ApiResponse.failure("Resource not found", List.of()));
+    }
+
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleDataIntegrity(org.springframework.dao.DataIntegrityViolationException exception) {
+        log.warn("Database constraint violation: {}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(ApiResponse.failure("Database operation conflict", List.of("The requested operation violates a data constraint.")));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Object>> handleIllegalArgument(IllegalArgumentException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.failure(exception.getMessage(), List.of()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleUnexpected(Exception exception) {
         log.error("Unhandled request failure", exception);

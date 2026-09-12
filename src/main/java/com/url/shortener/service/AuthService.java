@@ -172,10 +172,17 @@ public class AuthService {
 
     @Transactional
     public void requestPasswordReset(String email) {
-        User user = userRepository.findByEmail(email.trim().toLowerCase())
-            .orElseThrow(() -> new UserNotFoundException("No account exists for this email address"));
+        if (email == null || email.isBlank()) {
+            return;
+        }
+        String normalizedEmail = email.trim().toLowerCase();
+        java.util.Optional<User> userOptional = userRepository.findByEmail(normalizedEmail);
+        if (userOptional.isEmpty()) {
+            return;
+        }
+        User user = userOptional.get();
         if (Boolean.FALSE.equals(user.getEmailVerified())) {
-            throw new BadRequestException("Verify your email before resetting your password");
+            return;
         }
         otpService.issueOtp(user.getEmail(), user.getUsername(), OtpPurpose.PASSWORD_RESET);
     }
@@ -231,19 +238,37 @@ public class AuthService {
         }
 
         if (accessToken != null && !accessToken.isBlank()) {
-            Duration ttl = Duration.between(OffsetDateTime.now(ZoneOffset.UTC).toInstant(), jwtService.extractExpiration(accessToken));
-            redisSessionService.blacklistAccessToken(jwtService.extractId(accessToken), ttl);
+            try {
+                java.time.Instant expiresAt = jwtService.extractExpiration(accessToken);
+                Duration ttl = Duration.between(java.time.Instant.now(), expiresAt);
+                if (!ttl.isNegative() && !ttl.isZero()) {
+                    redisSessionService.blacklistAccessToken(jwtService.extractId(accessToken), ttl);
+                }
+            } catch (RuntimeException ignored) {
+                // Expired or malformed token does not require blacklisting
+            }
         }
     }
 
+    @Transactional
     public void logoutAll(String accessToken) {
-        User user = userService.findById(jwtService.extractUserId(accessToken));
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new InvalidTokenException("Access token is required");
+        }
+        UUID userId = jwtService.extractUserId(accessToken);
+        User user = userService.findById(userId);
         user.setTokenVersion(user.getTokenVersion() + 1);
         userRepository.save(user);
-        UUID userId = user.getId();
         redisSessionService.invalidateAllSessions(userId);
-        Duration ttl = Duration.between(OffsetDateTime.now(ZoneOffset.UTC).toInstant(), jwtService.extractExpiration(accessToken));
-        redisSessionService.blacklistAccessToken(jwtService.extractId(accessToken), ttl);
+        try {
+            java.time.Instant expiresAt = jwtService.extractExpiration(accessToken);
+            Duration ttl = Duration.between(java.time.Instant.now(), expiresAt);
+            if (!ttl.isNegative() && !ttl.isZero()) {
+                redisSessionService.blacklistAccessToken(jwtService.extractId(accessToken), ttl);
+            }
+        } catch (RuntimeException ignored) {
+            // Expired or malformed token does not require blacklisting
+        }
     }
 
     public UserResponse currentUser() {

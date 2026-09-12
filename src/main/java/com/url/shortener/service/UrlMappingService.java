@@ -63,6 +63,9 @@ public class UrlMappingService {
     @Transactional
     public ShortUrlResponse createShortUrl(String originalUrl, OffsetDateTime expirationDate, User user) {
         validateUrl(originalUrl);
+        if (expirationDate != null && expirationDate.isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
+            throw new BadRequestException("Expiration date must be in the future");
+        }
         UrlMapping urlMapping = new UrlMapping();
         urlMapping.setOriginalUrl(originalUrl.trim());
         urlMapping.setShortCode(generateUniqueShortCode());
@@ -104,46 +107,31 @@ public class UrlMappingService {
     @Transactional(readOnly = true)
     public UrlAnalyticsResponse getUrlAnalytics(UUID id, User user) {
         UrlMapping urlMapping = getOwnedUrl(id, user);
-        List<ClickEvent> events = clickEventRepository.findByUrlMapping_IdOrderByAccessedAtAsc(id);
 
-        Map<LocalDate, Long> dailyCounts = events.stream()
-            .collect(Collectors.groupingBy(event -> event.getAccessedAt().toLocalDate(), Collectors.counting()));
+        List<Object[]> dailyRows = clickEventRepository.findDailyClickCountsRaw(id);
+        List<DailyClickDto> dailyClicks = dailyRows.stream()
+            .map(row -> DailyClickDto.builder()
+                .date(parseLocalDate(row[0]))
+                .count(((Number) row[1]).longValue())
+                .build())
+            .toList();
 
-        List<DailyClickDto> dailyClicks = dailyCounts.entrySet().stream()
-            .sorted(Map.Entry.comparingByKey())
-            .map(entry -> DailyClickDto.builder().date(entry.getKey()).count(entry.getValue()).build())
+        List<Object[]> locationRows = clickEventRepository.findTopLocationsRaw(id, PageRequest.of(0, 10));
+        List<LocationAnalyticsDto> topLocations = locationRows.stream()
+            .map(row -> LocationAnalyticsDto.builder()
+                .country(normalizeLocationValue((String) row[0]))
+                .countryCode(normalizeLocationValue((String) row[1]))
+                .region(normalizeLocationValue((String) row[2]))
+                .city(normalizeLocationValue((String) row[3]))
+                .latitude((Double) row[4])
+                .longitude((Double) row[5])
+                .timezone(normalizeLocationValue((String) row[6]))
+                .clicks(((Number) row[7]).longValue())
+                .build())
             .toList();
 
         List<ClickEventDto> recentClicks = clickEventRepository.findTop20ByUrlMapping_IdOrderByAccessedAtDesc(id).stream()
             .map(this::toClickEventDto)
-            .toList();
-
-        List<LocationAnalyticsDto> topLocations = events.stream()
-            .collect(Collectors.groupingBy(
-                event -> new LocationKey(
-                    normalizeLocationValue(event.getCountry()),
-                    normalizeLocationValue(event.getCountryCode()),
-                    normalizeLocationValue(event.getRegion()),
-                    normalizeLocationValue(event.getCity()),
-                    event.getLatitude(),
-                    event.getLongitude(),
-                    normalizeLocationValue(event.getTimezone())
-                ),
-                Collectors.counting()
-            ))
-            .entrySet().stream()
-            .sorted(Map.Entry.<LocationKey, Long>comparingByValue(Comparator.reverseOrder()))
-            .limit(10)
-            .map(entry -> LocationAnalyticsDto.builder()
-                .country(entry.getKey().country())
-                .countryCode(entry.getKey().countryCode())
-                .region(entry.getKey().region())
-                .city(entry.getKey().city())
-                .latitude(entry.getKey().latitude())
-                .longitude(entry.getKey().longitude())
-                .timezone(entry.getKey().timezone())
-                .clicks(entry.getValue())
-                .build())
             .toList();
 
         return UrlAnalyticsResponse.builder()
@@ -169,6 +157,9 @@ public class UrlMappingService {
             urlMapping.setOriginalUrl(request.getUrl().trim());
         }
         if (request.getExpirationDate() != null) {
+            if (request.getExpirationDate().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
+                throw new BadRequestException("Expiration date must be in the future");
+            }
             urlMapping.setExpirationDate(request.getExpirationDate());
         }
         if (request.getActive() != null) {
@@ -267,10 +258,26 @@ public class UrlMappingService {
         return shortCode;
     }
 
+    private static final int MAX_URL_LENGTH = 2048;
+
     private void validateUrl(String url) {
+        if (url == null || url.isBlank()) {
+            throw new BadRequestException("URL must be absolute and valid");
+        }
+        String trimmed = url.trim();
+        if (trimmed.length() > MAX_URL_LENGTH) {
+            throw new BadRequestException("URL must not exceed " + MAX_URL_LENGTH + " characters");
+        }
+        if (trimmed.contains("\r") || trimmed.contains("\n")) {
+            throw new BadRequestException("URL contains invalid line break characters");
+        }
         try {
-            URI uri = URI.create(url.trim());
-            if (uri.getScheme() == null || uri.getHost() == null) {
+            URI uri = URI.create(trimmed);
+            String scheme = uri.getScheme();
+            if (scheme == null || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))) {
+                throw new BadRequestException("URL scheme must be http or https");
+            }
+            if (uri.getHost() == null || uri.getHost().isBlank()) {
                 throw new BadRequestException("URL must be absolute and valid");
             }
         } catch (IllegalArgumentException exception) {
@@ -291,14 +298,13 @@ public class UrlMappingService {
         return (value == null || value.isBlank()) ? "Unknown" : value;
     }
 
-    private record LocationKey(
-        String country,
-        String countryCode,
-        String region,
-        String city,
-        Double latitude,
-        Double longitude,
-        String timezone
-    ) {
+    private LocalDate parseLocalDate(Object value) {
+        if (value instanceof LocalDate ld) {
+            return ld;
+        }
+        if (value instanceof java.sql.Date sd) {
+            return sd.toLocalDate();
+        }
+        return LocalDate.parse(value.toString());
     }
 }

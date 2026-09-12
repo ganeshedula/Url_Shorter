@@ -2,6 +2,7 @@ package com.url.shortener.security.security;
 
 import com.url.shortener.config.AppProperties;
 import com.url.shortener.security.JwtAuthenticationFilter;
+import com.url.shortener.security.RateLimitFilter;
 import com.url.shortener.security.RestAuthenticationEntryPoint;
 import com.url.shortener.service.UserDetailsServiceImpl;
 import org.springframework.context.annotation.Bean;
@@ -33,17 +34,20 @@ import java.util.List;
 public class WebSecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitFilter rateLimitFilter;
     private final UserDetailsServiceImpl userDetailsService;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final AppProperties appProperties;
 
     public WebSecurityConfig(
         JwtAuthenticationFilter jwtAuthenticationFilter,
+        RateLimitFilter rateLimitFilter,
         UserDetailsServiceImpl userDetailsService,
         RestAuthenticationEntryPoint authenticationEntryPoint,
         AppProperties appProperties
     ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.rateLimitFilter = rateLimitFilter;
         this.userDetailsService = userDetailsService;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.appProperties = appProperties;
@@ -57,13 +61,14 @@ public class WebSecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(exception -> exception.authenticationEntryPoint(authenticationEntryPoint))
             .headers(headers -> headers
+                .contentTypeOptions(Customizer.withDefaults())
                 .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
                 .frameOptions(frame -> frame.sameOrigin())
                 .referrerPolicy(referrer -> referrer.policy(
                     org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER
                 )))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/actuator/health").permitAll()
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/verify-registration-otp", "/api/auth/resend-otp", "/api/auth/forgot-password", "/api/auth/verify-reset-otp", "/api/auth/reset-password").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/auth/google", "/api/auth/google/callback").permitAll()
                 .requestMatchers(HttpMethod.GET, "/{shortCode:[a-zA-Z0-9]{6,20}}").permitAll()
@@ -71,11 +76,26 @@ public class WebSecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/auth/logout-all").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/auth/me").authenticated()
                 .requestMatchers("/api/url/**").authenticated()
-                .anyRequest().permitAll())
+                .anyRequest().authenticated())
             .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(rateLimitFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public org.springframework.boot.web.servlet.FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(RateLimitFilter filter) {
+        org.springframework.boot.web.servlet.FilterRegistrationBean<RateLimitFilter> registration = new org.springframework.boot.web.servlet.FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public org.springframework.boot.web.servlet.FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistration(JwtAuthenticationFilter filter) {
+        org.springframework.boot.web.servlet.FilterRegistrationBean<JwtAuthenticationFilter> registration = new org.springframework.boot.web.servlet.FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
