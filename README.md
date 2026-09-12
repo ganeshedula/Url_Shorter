@@ -1,14 +1,15 @@
-# 🔗 URL Shortener Backend (Spring Boot 3)
+# 🔗 URL Shortener Backend (Spring Boot 3.5.4)
 
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://www.oracle.com/java/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen.svg)](https://spring.io/projects/spring-boot)
-[![Spring Security](https://img.shields.io/badge/Spring%20Security-6.x-blue.svg)](https://spring.io/projects/spring-security)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7-red.svg)](https://redis.io/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.4-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![Spring Security](https://img.shields.io/badge/Spring%20Security-6-blue.svg)](https://spring.io/projects/spring-security)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16--alpine-blue.svg)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7--alpine-red.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-Swagger-green.svg)](http://localhost:8080/swagger-ui.html)
+[![Maven](https://img.shields.io/badge/Maven-3.9.8-C71A36.svg)](https://maven.apache.org/)
 
-A production-ready, highly available RESTful URL Shortener backend service built with **Java 21**, **Spring Boot 3**, **Spring Security 6**, **PostgreSQL**, **Redis**, **JWT Authentication**, **Maven**, **Lombok**, and **OpenAPI/Swagger**.
+A production-ready, highly available RESTful URL Shortener backend service built with **Java 21**, **Spring Boot 3.5.4**, **Spring Security 6**, **PostgreSQL 16**, **Redis 7**, **JWT Authentication**, **Maven**, **Lombok**, **Brevo Email Service**, and **OpenAPI/Swagger**.
 
 ---
 
@@ -19,6 +20,7 @@ A production-ready, highly available RESTful URL Shortener backend service built
 - **Redis Session Management**: State management for refresh tokens stored in Redis with full token rotation support.
 - **Session Control**: Supports logging out single sessions or revoking all sessions across devices (`logout-all`).
 - **Account Endpoints**: Email-based registration, login, and user profile (`/api/auth/me`).
+- **Google OAuth 2.0**: Seamless social login integration with automatic account matching by email.
 
 ### 🌐 URL Management & Real-Time Analytics
 - **Full CRUD Operations**: Create, read, update, delete, and list owner-scoped URLs.
@@ -26,12 +28,20 @@ A production-ready, highly available RESTful URL Shortener backend service built
 - **Fast Redirection**: High-performance HTTP 302 redirect lookup using unique short codes.
 - **Rich Analytics**: Tracks total click counts, last access timestamps, device OS, browser user-agents, client IP addresses, and daily click rollups.
 - **JPA Auditing**: Automatic creation and update timestamps (`createdAt`, `updatedAt`).
+- **GeoIP Location**: Automatic geolocation tracking for click analytics using IP-based lookup.
+
+### 📧 Email & OTP Management
+- **Brevo Email Service**: Secure email delivery via Brevo REST API (replaces SMTP to bypass port restrictions).
+- **Email Verification**: OTP-based account verification with customizable expiration and resend cooldowns.
+- **Password Reset**: Secure password reset flow with time-limited authorization tokens.
+- **Configurable OTP**: Maximum retry attempts, expiration duration, and resend cooldown settings stored in Redis.
 
 ### 🛡️ Resilience & Standards
 - **Standardized API Envelope**: All REST responses follow a uniform `ApiResponse<T>` wrapper.
 - **Global Error Handling**: Comprehensive validation annotations and centralized exception handler.
 - **OpenAPI & Swagger Documentation**: Auto-generated interactive API UI at runtime.
-- **Containerization**: Full Docker Compose setup for PostgreSQL, Redis, and Spring Boot.
+- **Containerization**: Full Docker Compose setup with multi-stage build for PostgreSQL, Redis, and Spring Boot.
+- **Actuator Endpoints**: Health checks and application info endpoints for monitoring and deployment automation.
 
 ---
 
@@ -72,25 +82,128 @@ flowchart TD
 ## 📁 Directory Structure
 
 ```text
-src/
-├── main/
-│   ├── java/com/url/shortener/
-│   │   ├── config/          # Security, Redis, JPA Auditing, & OpenAPI configs
-│   │   ├── controllers/     # Authentication & URL Management REST Controllers
-│   │   ├── dtos/            # Request payloads & API Response Data Transfer Objects
-│   │   ├── exception/       # Custom exceptions & Global Exception Handler
-│   │   ├── models/          # JPA Entities (User, Url), Enums, & Redis Models
-│   │   ├── repo/            # Data Repositories & Specifications for search
-│   │   ├── security/        # JWT Filter, Authentication Entrypoints, Security Config
-│   │   ├── service/         # Business logic for Auth, URL shortener, & Sessions
-│   │   └── util/            # Base62 code generation & user-agent parsers
-│   └── resources/
-│       └── application.properties # Spring configuration file
-docs/
-├── database-schema.md       # Complete database ERD and table specifications
-└── postman/                # Exported Postman collection for API testing
-Dockerfile
-docker-compose.yml
+url-shorter-sb/
+├── src/
+│   ├── main/
+│   │   ├── java/com/url/shortener/
+│   │   │   ├── UrlShorterSbApplication.java      # Spring Boot entry point
+│   │   │   ├── config/                           # Configuration beans & security setup
+│   │   │   │   ├── AppProperties.java           # Application property bindings
+│   │   │   │   ├── AsyncConfig.java             # Async & scheduled task configuration
+│   │   │   │   ├── JpaConfig.java               # JPA auditing configuration
+│   │   │   │   ├── OpenApiConfig.java           # Swagger/OpenAPI configuration
+│   │   │   │   ├── PropertyConfig.java          # Property validation & setup
+│   │   │   │   └── RedisConfig.java             # Redis connection & serialization
+│   │   │   │
+│   │   │   ├── controllers/                     # REST API endpoints
+│   │   │   │   ├── AuthController.java          # Auth endpoints (register, login, refresh, etc.)
+│   │   │   │   └── UrlMappingController.java    # URL CRUD & redirect endpoints
+│   │   │   │
+│   │   │   ├── dtos/                            # Data Transfer Objects (Request/Response)
+│   │   │   │   ├── ApiResponse.java             # Standard API response wrapper
+│   │   │   │   ├── AuthResponse.java            # Authentication response payload
+│   │   │   │   ├── CreateShortUrlRequest.java   # Create URL request
+│   │   │   │   ├── LoginRequest.java            # Login credentials
+│   │   │   │   ├── OtpVerificationRequest.java  # OTP verification payload
+│   │   │   │   ├── RegisterRequest.java         # User registration payload
+│   │   │   │   ├── ShortUrlResponse.java        # Short URL response
+│   │   │   │   ├── UrlAnalyticsResponse.java    # URL analytics payload
+│   │   │   │   ├── UpdateUrlRequest.java        # Update URL request
+│   │   │   │   ├── UserResponse.java            # User profile response
+│   │   │   │   ├── PagedResponse.java           # Pagination wrapper
+│   │   │   │   └── ... (other DTOs)
+│   │   │   │
+│   │   │   ├── exception/                       # Exception handling
+│   │   │   │   ├── GlobalExceptionHandler.java  # Centralized error handling & validation
+│   │   │   │   ├── BadRequestException.java
+│   │   │   │   ├── DuplicateResourceException.java
+│   │   │   │   ├── InvalidTokenException.java
+│   │   │   │   ├── UnauthorizedException.java
+│   │   │   │   ├── UrlNotFoundException.java
+│   │   │   │   ├── UserNotFoundException.java
+│   │   │   │   └── ServiceUnavailableException.java
+│   │   │   │
+│   │   │   ├── models/                          # JPA entities & enums
+│   │   │   │   ├── BaseEntity.java              # Base entity with UUID & timestamps
+│   │   │   │   ├── User.java                    # User entity with credentials & metadata
+│   │   │   │   ├── UrlMapping.java              # Short URL entity with click analytics
+│   │   │   │   ├── ClickEvent.java              # Individual click record for analytics
+│   │   │   │   ├── OtpVerification.java         # OTP state (Redis-backed)
+│   │   │   │   ├── RefreshSession.java          # User session state (Redis-backed)
+│   │   │   │   ├── Role.java                    # User role enum
+│   │   │   │   └── OtpPurpose.java              # OTP type enum (REGISTRATION, RESET, etc.)
+│   │   │   │
+│   │   │   ├── repo/                            # Data repositories & queries
+│   │   │   │   ├── UserRepository.java          # User CRUD & custom queries
+│   │   │   │   ├── UrlMappingRepository.java    # URL CRUD with search/filter support
+│   │   │   │   ├── ClickEventRepository.java    # Click event storage & aggregations
+│   │   │   │   └── OtpVerificationRepository.java # OTP verification queries
+│   │   │   │
+│   │   │   ├── security/                        # Spring Security & JWT
+│   │   │   │   ├── security/
+│   │   │   │   │   └── WebSecurityConfig.java   # Spring Security filter chain config
+│   │   │   │   ├── JwtAuthenticationFilter.java # JWT token validation filter
+│   │   │   │   ├── JwtService.java              # JWT creation, validation & claims extraction
+│   │   │   │   ├── RestAuthenticationEntryPoint.java # Unauthorized error responses
+│   │   │   │   ├── UserDetailsImpl.java          # Custom UserDetails implementation
+│   │   │   │   └── UserDetailsServiceImpl.java   # UserDetailsService implementation
+│   │   │   │
+│   │   │   ├── service/                         # Business logic layer
+│   │   │   │   ├── AuthService.java             # Authentication & registration logic
+│   │   │   │   ├── UrlMappingService.java       # URL creation, update, delete logic
+│   │   │   │   ├── OtpService.java              # OTP generation, validation, storage (Redis)
+│   │   │   │   ├── EmailService.java            # Email delivery via Brevo API
+│   │   │   │   ├── GeoLocationService.java      # Geolocation lookup from IP address
+│   │   │   │   ├── GeoLocationClient.java       # Geolocation API abstraction
+│   │   │   │   ├── IpApiGeoLocationClient.java  # IPApi implementation for GeoIP
+│   │   │   │   ├── GoogleOAuthService.java      # Google OAuth 2.0 token validation
+│   │   │   │   ├── RedisSessionService.java     # Refresh token & session state management
+│   │   │   │   ├── UserService.java             # User CRUD & profile management
+│   │   │   │   ├── UserDetailsServiceImpl.java   # Spring Security UserDetailsService
+│   │   │   │   ├── ClickAnalyticsEnrichmentListener.java # Event-driven click analytics
+│   │   │   │   └── ClickEventRecorded.java      # Click event domain event
+│   │   │   │
+│   │   │   └── util/                            # Utility classes
+│   │   │       ├── ShortCodeGenerator.java      # Base62 short code generation
+│   │   │       ├── ClientInfoExtractor.java     # Extract client IP, user-agent, device info
+│   │   │       └── ClientInfo.java              # Client metadata DTO
+│   │   │
+│   │   └── resources/
+│   │       ├── application.properties           # Spring configuration (dev & prod settings)
+│   │       ├── static/                          # Static assets (CSS, JS, images)
+│   │       └── templates/                       # Email templates
+│   │           ├── verification-email.html      # Registration OTP email template
+│   │           └── password-reset-email.html    # Password reset OTP email template
+│   │
+│   └── test/
+│       ├── java/com/url/shortener/
+│       │   ├── controllers/
+│       │   │   └── AuthControllerTest.java      # Auth endpoint integration tests
+│       │   ├── security/
+│       │   │   └── ClientInfoExtractorTest.java # Client info extraction tests
+│       │   ├── service/
+│       │   │   ├── AuthServiceTest.java         # Authentication logic tests
+│       │   │   ├── AuthSecurityIntegrationTest.java # Security integration tests
+│       │   │   ├── GeoLocationServiceTest.java  # Geolocation service tests
+│       │   │   ├── OtpServiceTest.java          # OTP generation & validation tests
+│       │   │   └── UrlMappingServiceIntegrationTest.java # URL service integration tests
+│       │   └── UrlShorterSbApplicationTests.java # Application context tests
+│       └── resources/
+│           └── application.properties           # Test configuration (H2 in-memory DB)
+│
+├── docs/
+│   ├── database-schema.md                       # Complete ERD and database table specifications
+│   └── postman/
+│       └── url-shortener.postman_collection.json # Postman API collection for testing
+│
+├── .env.example                                 # Environment variable template
+├── .gitignore                                   # Git ignore rules
+├── Dockerfile                                   # Multi-stage Docker build (Maven + JRE)
+├── docker-compose.yml                           # Docker Compose: PostgreSQL + Redis + Spring Boot
+├── pom.xml                                      # Maven project configuration & dependencies
+├── mvnw & mvnw.cmd                              # Maven wrapper for CI/CD
+├── HELP.md                                      # Maven-generated help documentation
+└── README.md                                    # This file
 ```
 
 ---
@@ -158,13 +271,15 @@ If you prefer running the Spring Boot application locally while starting Postgre
 
 | Variable | Description | Default |
 |---|---|---|
-| `SERVER_PORT` | HTTP port for the Spring Boot application | `8080` |
-| `DB_URL` | PostgreSQL JDBC Connection String | `jdbc:postgresql://localhost:5432/url_shortener` |
+| `SERVER_PORT` | HTTP port for the Spring Boot application | `8081` (local), `8080` (Docker) |
+| `DB_URL` | PostgreSQL JDBC Connection String | `jdbc:postgresql://localhost:5433/url_shortener` |
 | `DB_USERNAME` | PostgreSQL database user | `postgres` |
 | `DB_PASSWORD` | PostgreSQL database password | `postgres` |
+| `DB_NAME` | PostgreSQL database name | `url_shortener` |
 | `JPA_DDL_AUTO` | Hibernate schema mode; use `validate` for an existing production database | `update` |
 | `REDIS_HOST` | Hostname for Redis instance | `localhost` |
 | `REDIS_PORT` | Port for Redis instance | `6379` |
+| `REDIS_USERNAME` | Redis authentication username | *(optional)* |
 | `REDIS_PASSWORD` | Access password for Redis instance | *(empty)* |
 | `REDIS_SSL_ENABLED` | Enable TLS for a managed Redis service | `false` |
 | `APP_BASE_URL` | Base domain/URL used to generate shortened links | `http://localhost:8080` |
@@ -172,43 +287,94 @@ If you prefer running the Spring Boot application locally while starting Postgre
 | `JWT_SECRET` | Base64-encoded secret key for signing JWTs | *(Required in Production)* |
 | `GOOGLE_CLIENT_ID` | Google OAuth web-client ID | *(Required for Google sign-in)* |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth web-client secret | *(Required for Google sign-in)* |
-| `GOOGLE_REDIRECT_URI` | Exact backend OAuth callback registered at Google | `http://localhost:8081/api/auth/google/callback` |
+| `GOOGLE_REDIRECT_URI` | Exact backend OAuth callback registered at Google | `http://localhost:8080/api/auth/google/callback` |
 | `FRONTEND_URL` | Trusted frontend origin used after OAuth completes | `http://localhost:3000` |
-| `MAIL_USERNAME` | SMTP sender email address | *(Required for OTP email delivery)* |
-| `MAIL_APP_PASSWORD` | SMTP/Gmail app password | *(Required for OTP email delivery)* |
-| `MAIL_HOST` / `MAIL_PORT` | SMTP host and port | `smtp.gmail.com` / `587` |
-| `OTP_EXPIRATION` | OTP validity duration | `PT10M` |
-| `OTP_RESET_AUTHORIZATION_EXPIRATION` | Password-reset authorization validity | `PT15M` |
-| `OTP_RESEND_COOLDOWN` | Minimum wait before requesting another OTP | `PT60S` |
-| `OTP_MAX_ATTEMPTS` | Maximum invalid OTP attempts | `5` |
+| `BREVO_API_KEY` | Brevo transactional email API key | *(Required for email delivery)* |
+| `MAIL_FROM_ADDRESS` | Sender email address for Brevo emails | *(Required for email delivery)* |
+| `MAIL_SENDER_NAME` | Display name for email sender | `Nexly` |
+| `MAIL_HOST` | SMTP host (legacy, not used with Brevo API) | `smtp.gmail.com` |
+| `MAIL_PORT` | SMTP port (legacy, not used with Brevo API) | `587` |
+| `MAIL_USERNAME` | SMTP username (legacy, not used with Brevo API) | *(empty)* |
+| `MAIL_APP_PASSWORD` | SMTP app password (legacy, not used with Brevo API) | *(empty)* |
+| `OTP_EXPIRATION` | OTP validity duration (ISO 8601 format) | `PT10M` (10 minutes) |
+| `OTP_RESET_AUTHORIZATION_EXPIRATION` | Password-reset authorization validity | `PT15M` (15 minutes) |
+| `OTP_RESEND_COOLDOWN` | Minimum wait before requesting another OTP | `PT60S` (60 seconds) |
+| `OTP_MAX_ATTEMPTS` | Maximum invalid OTP attempts before lockout | `5` |
 
-### Email delivery setup
+### Email Delivery Setup (Brevo)
 
-For Gmail, `MAIL_USERNAME` must be the Gmail address that sends the email and `MAIL_APP_PASSWORD` must be a 16-character Google App Password (not the normal Google account password). Enable two-step verification first, then create an App Password in the Google Account security settings. Add both values to `.env` before starting Docker Compose; the app container now receives them explicitly. Never commit this file or the app password.
+**Brevo** provides secure transactional email delivery via REST API, eliminating the need for SMTP configuration and avoiding port restrictions (common on Render free tier).
 
-For a direct local Spring Boot launch, run from `url-shorter-sb`. The application imports an optional local `.env` file, so the same `MAIL_*` and `REDIS_*` settings are resolved without exporting secrets into the shell. Start Redis before registering an account (for example, `docker compose up -d redis`); a Redis connection error means no OTP is generated or emailed.
+1. **Sign up** for a free Brevo account at [brevo.com](https://www.brevo.com)
+2. **Get your API key** from the [API settings page](https://app.brevo.com/settings/keys/api)
+3. **Configure in `.env`**:
+   ```bash
+   BREVO_API_KEY=your_api_key_here
+   MAIL_FROM_ADDRESS=your-email@example.com
+   ```
+4. **No SMTP secrets required** — the application uses Brevo REST API internally.
 
-Verification OTPs, attempt counters, resend cooldowns, and password-reset authorizations are stored in Redis with automatic expiry. PostgreSQL is no longer used for active OTP state.
+### Redis Persistence
 
-### Render Redis setup
+The application stores the following data in Redis with automatic expiration:
+- **Refresh sessions** — Active JWT refresh tokens with session metadata
+- **OTP verifications** — Time-limited OTP codes for registration and password reset
+- **Password reset authorizations** — One-time tokens for secure password changes
 
-For a Render Key Value instance, use the host, port, and password from its **Connect** menu as `REDIS_HOST`, `REDIS_PORT`, and `REDIS_PASSWORD` on the backend Web Service. Keep the backend and Key Value service in the same Render region. Set `REDIS_SSL_ENABLED=false` for the internal `redis://` endpoint, or `true` for an external TLS endpoint.
+All Redis data is configured to expire automatically per the `*_EXPIRATION` settings, ensuring no stale data accumulates.
 
-For an existing Render Postgres database, set `JPA_DDL_AUTO=validate` on the backend service. This avoids running Hibernate schema updates during every production boot and shortens startup time. Use `update` only for initial local development or a deliberate schema update.
+### Render.com Deployment Setup
 
-### Google OAuth setup
+For deploying to [Render.com](https://render.com):
 
-Create a **Web application** OAuth client in Google Cloud Console. For a local backend run, add this exact authorized redirect URI:
+1. **Create a PostgreSQL Database**
+   - In Render dashboard, create a new PostgreSQL database
+   - Copy the connection string to `DB_URL`
+   - Set `JPA_DDL_AUTO=validate` to avoid schema migrations on every boot
 
-`http://localhost:8081/api/auth/google/callback`
+2. **Create a Redis Instance**
+   - Create a Key Value Store (Redis)
+   - Copy `REDIS_HOST`, `REDIS_PORT`, and `REDIS_PASSWORD` from the Connect tab
+   - Set `REDIS_SSL_ENABLED=false` for internal endpoint or `true` for TLS endpoint
 
-If the backend runs through the supplied Docker Compose port mapping, add instead:
+3. **Deploy Backend Web Service**
+   - Connect your GitHub repository
+   - Build command: `./mvnw clean package`
+   - Start command: `java -jar target/url-shorter-sb-0.0.1-SNAPSHOT.jar`
+   - Set all environment variables in the Render dashboard
 
-`http://localhost:8080/api/auth/google/callback`
+4. **Google OAuth for Production**
+   - Register authorized redirect URI: `https://your-render-api.onrender.com/api/auth/google/callback`
+   - Set `FRONTEND_URL` to your frontend domain
+   - Add frontend URL to `APP_CORS_ALLOWED_ORIGINS`
 
-Set `GOOGLE_REDIRECT_URI` to the URI you registered, and set `FRONTEND_URL` to the exact frontend origin. In production, both must use HTTPS, for example `https://api.example.com/api/auth/google/callback` and `https://app.example.com`. Add the frontend origin to `APP_CORS_ALLOWED_ORIGINS` too.
+---
 
-Google login uses `openid email profile`, validates the returned ID token and verified email, matches existing accounts by the existing unique `users.email`, and issues the same JWT/Redis refresh session as password login. It does not create any database table or store Google access tokens.
+## 🧪 Testing
+
+The project includes comprehensive unit and integration tests using **JUnit 5**, **Mockito**, and **Spring Test**:
+
+```bash
+# Run all tests
+./mvnw test
+
+# Run specific test class
+./mvnw test -Dtest=AuthServiceTest
+
+# Run with test coverage report
+./mvnw clean test
+```
+
+**Test Suites:**
+- **AuthControllerTest** — Authentication endpoint integration tests
+- **AuthServiceTest** — Login, registration, and token refresh logic
+- **AuthSecurityIntegrationTest** — Spring Security integration tests
+- **GeoLocationServiceTest** — IP-based geolocation service
+- **OtpServiceTest** — OTP generation, validation, and Redis storage
+- **UrlMappingServiceIntegrationTest** — URL CRUD and analytics operations
+- **ClientInfoExtractorTest** — Client metadata extraction utilities
+
+Test configuration uses an **H2 in-memory database** for fast, isolated test execution with automatic cleanup between test runs.
 
 ---
 
@@ -293,9 +459,53 @@ For detailed database table definitions, foreign key constraints, and index deta
 
 ---
 
-## 🚀 Roadmap & Enhancements
+## 🚀 Roadmap & Future Enhancements
 
-- [ ] GeoIP location parsing for click analytics (country/city lookup).
-- [ ] Rate-limiting per user/IP on auth and redirect endpoints.
-- [ ] Database schema migrations using Flyway or Liquibase.
-- [ ] Distributed logging and telemetry with Prometheus and Grafana.
+- [ ] **Advanced Analytics Dashboard** — Location heatmaps, referrer tracking, device breakdowns.
+- [ ] **Rate Limiting** — Per-user and per-IP rate limits on auth and redirect endpoints using Redis.
+- [ ] **Database Migrations** — Structured schema migrations using Flyway or Liquibase.
+- [ ] **Distributed Tracing** — OpenTelemetry integration for request tracing across services.
+- [ ] **Metrics & Monitoring** — Prometheus metrics and Grafana dashboards for application health.
+- [ ] **Batch Operations** — Bulk URL creation, deletion, and analytics export.
+- [ ] **Custom Short Codes** — Allow users to specify vanity short codes with admin approval.
+- [ ] **URL Expiration Scheduling** — Automatic URL deactivation after a configurable period.
+- [ ] **Link Preview & Social Media Cards** — Open Graph and Twitter Card metadata injection.
+
+---
+
+## 📚 Technology Stack Summary
+
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| **Runtime** | Java | 21 LTS |
+| **Framework** | Spring Boot | 3.5.4 |
+| **Security** | Spring Security 6 + JWT (JJWT) | 6.x / 0.12.7 |
+| **Database** | PostgreSQL | 16 (Alpine) |
+| **Cache/Session** | Redis | 7 (Alpine) |
+| **API Docs** | SpringDoc OpenAPI (Swagger) | 2.8.9 |
+| **Build Tool** | Maven | 3.9.8 |
+| **Email Service** | Brevo REST API | Latest |
+| **OAuth 2.0** | Google OAuth 2.0 | Latest |
+| **Testing** | JUnit 5 + Mockito + Spring Test | Latest |
+| **Containerization** | Docker + Docker Compose | Latest |
+| **Code Generation** | Lombok | Latest |
+
+---
+
+## 🎯 Project Highlights
+
+✅ **Production-Ready** — Stateless JWT auth with Redis session management  
+✅ **Secure** — Spring Security 6, CORS, HTTPS-ready OAuth 2.0  
+✅ **Scalable** — Redis for caching and session state, PostgreSQL for persistence  
+✅ **Well-Tested** — Integration tests for auth, services, and API endpoints  
+✅ **Documented** — OpenAPI/Swagger UI, detailed database schema, Postman collection  
+✅ **Cloud-Ready** — Multi-stage Docker build, Render.com deployment guides  
+✅ **Developer-Friendly** — Lombok for reduced boilerplate, clean architecture layers  
+
+---
+
+## 📞 Support & Contribution
+
+For issues, feature requests, or contributions, please open a GitHub issue or submit a pull request.
+
+**License**: This project is provided as-is for educational and commercial use.
